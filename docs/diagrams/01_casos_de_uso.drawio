@@ -1,0 +1,48 @@
+<mxfile host="app.diagrams.net" modified="2026-07-19T20:00:00.000Z" agent="Claude" version="24.0.0" type="device">
+  <diagram name="Casos de uso" id="usecase01">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Diagrama de Casos de Uso — LeeLibre" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="200" y="20" width="450" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="system" value="Sistema LeeLibre" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1c3778;strokeWidth=2;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="270" y="80" width="310" height="600" as="geometry" />
+        </mxCell>
+        <mxCell id="lector" value="Lector" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=none;verticalAlign=top;html=1;outlineConnect=0;fillColor=#dae8fc;strokeColor=#1c3778;" vertex="1" parent="1">
+          <mxGeometry x="80" y="320" width="40" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="admin" value="Administrador" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=none;verticalAlign=top;html=1;outlineConnect=0;fillColor=#dae8fc;strokeColor=#1c3778;" vertex="1" parent="1">
+          <mxGeometry x="720" y="320" width="40" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="uc1" value="Iniciar sesión" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ebeef5;strokeColor=#1c3778;" vertex="1" parent="1">
+          <mxGeometry x="320" y="130" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc2" value="Consultar catálogo" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ebeef5;strokeColor=#1c3778;" vertex="1" parent="1">
+          <mxGeometry x="320" y="220" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc3" value="Registrar préstamo" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ebeef5;strokeColor=#1c3778;" vertex="1" parent="1">
+          <mxGeometry x="320" y="310" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc4" value="Consultar historial" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ebeef5;strokeColor=#1c3778;" vertex="1" parent="1">
+          <mxGeometry x="320" y="400" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc5" value="Gestionar libros" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ebeef5;strokeColor=#1c3778;" vertex="1" parent="1">
+          <mxGeometry x="320" y="490" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc6" value="Ver reportes" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ebeef5;strokeColor=#1c3778;" vertex="1" parent="1">
+          <mxGeometry x="320" y="580" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" style="endArrow=none;html=1;strokeColor=#666666;" edge="1" parent="1" source="lector" target="uc1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="endArrow=none;html=1;strokeColor=#666666;" edge="1" parent="1" source="lector" target="uc2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="endArrow=none;html=1;strokeColor=#666666;" edge="1" parent="1" source="lector" target="uc3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="endArrow=none;html=1;strokeColor=#666666;" edge="1" parent="1" source="lector" target="uc4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="endArrow=none;html=1;strokeColor=#666666;" edge="1" parent="1" source="admin" target="uc1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="endArrow=none;html=1;strokeColor=#666666;" edge="1" parent="1" source="admin" target="uc2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="endArrow=none;html=1;strokeColor=#666666;" edge="1" parent="1" source="admin" target="uc5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="endArrow=none;html=1;strokeColor=#666666;" edge="1" parent="1" source="admin" target="uc6"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
