@@ -44,6 +44,10 @@ leelibre/
 | golang-jwt/jwt | Tercero | Emisión de tokens de sesión |
 | golang.org/x/crypto/bcrypt | Oficial | Cifrado de contraseñas |
 
+## Diagramas
+
+Los diagramas del sistema en formato editable draw.io están en `docs/diagrams/`. Se pueden abrir y modificar desde [app.diagrams.net](https://app.diagrams.net).
+
 ## Estado del proyecto
 
 Este repositorio se encuentra en la **Etapa 1: Planeación del software**. Todavía no contiene código ejecutable. Las carpetas de módulos (`internal/catalogo`, `internal/usuarios`, `internal/prestamos`, `internal/reportes`) están creadas y a la espera de la implementación que se realizará durante la Etapa 2.
