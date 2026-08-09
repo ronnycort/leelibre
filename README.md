@@ -1,62 +1,163 @@
 # LeeLibre
 
-Sistema de gestión de libros electrónicos desarrollado en Go, siguiendo el paradigma de programación funcional. Proyecto integrador de la asignatura, dividido en tres etapas: planeación, desarrollo e integración.
+Sistema de gestión de biblioteca digital desarrollado en Go bajo el paradigma de **Programación Orientada a Objetos**. Proyecto integrador de la asignatura *Programación Orientada a Objetos 2*.
+
+Estado: **Etapa 2 completada** — dominio de POO, cola de reservas, persistencia en JSON y servicios web REST.
 
 ## Descripción
 
-LeeLibre es una aplicación web para administrar una biblioteca digital. Permite consultar un catálogo de libros, registrar préstamos digitales por parte de usuarios autenticados y consultar el historial de lectura. Un módulo administrativo permite mantener el catálogo actualizado.
+LeeLibre administra una biblioteca digital con dos interfaces sobre el mismo núcleo:
+
+- **CLI (consola)** — herramienta de operación local para administradores y lectores.
+- **API REST** — servicios web con serialización JSON, listos para consumo desde cualquier cliente HTTP.
+
+Ambas comparten los mismos paquetes del dominio (`catalogo`, `usuarios`, `prestamos`, `reservas`, `reportes`), demostrando que la arquitectura por capas permite exponer la misma lógica a través de múltiples interfaces sin duplicación.
 
 ## Stack tecnológico
 
 - **Lenguaje:** Go 1.22+
-- **Framework web:** Gin
-- **Base de datos:** SQLite
-- **Autenticación:** JWT con contraseñas cifradas mediante bcrypt
-
-## Módulos
-
-1. **Catálogo** — gestión de libros, autores y categorías.
-2. **Usuarios y autenticación** — registro, login y roles.
-3. **Préstamos digitales** — reserva, descarga e historial.
-4. **Reportes** (transversal) — estadísticas agregadas de uso.
+- **Servidor web:** `net/http` (biblioteca estándar — sin dependencias externas)
+- **Serialización:** JSON con `encoding/json`
+- **Persistencia:** archivos JSON en disco
+- **Cero dependencias externas** — el proyecto compila con solo la biblioteca estándar
 
 ## Estructura del proyecto
 
+```
 leelibre/
-├── cmd/server/         # punto de entrada de la aplicación
+├── cmd/
+│   ├── leelibre/main.go          # Aplicación CLI
+│   └── server/main.go            # Servidor HTTP REST
 ├── internal/
-│   ├── catalogo/       # módulo de catálogo
-│   ├── usuarios/       # módulo de usuarios
-│   ├── prestamos/      # módulo de préstamos
-│   └── reportes/       # módulo transversal
-├── web/
-│   ├── templates/      # vistas html/template
-│   └── static/         # css e imágenes
-├── migrations/         # esquemas SQL
-└── docs/               # documentación de las tres entregas
+│   ├── errores/errores.go        # Errores de dominio
+│   ├── catalogo/                 # Libros, categorías, catálogo
+│   ├── usuarios/                 # Usuarios, autenticación, roles
+│   ├── prestamos/                # Préstamos e historial
+│   ├── reservas/                 # ★ Cola FIFO de reservas (estructura de datos)
+│   ├── reportes/                 # Interface Reportador + implementaciones
+│   ├── persistencia/             # Guardado a JSON de cambios
+│   └── api/                      # Handlers HTTP y DTOs para JSON
+├── data/
+│   ├── categorias.json           # 7 categorías
+│   ├── libros.json               # 30 libros
+│   ├── usuarios.json             # 10 usuarios
+│   └── prestamos.json            # Se genera al ejecutar (persistencia)
+├── docs/                         # Documentación de etapas
+├── go.mod                        # Sin dependencias
+└── README.md
+```
 
-## Dependencias planeadas
+## Cómo ejecutar
 
-| Paquete       | Origen  | Uso            |
-|---------------|---------|----------------|
-| gin-gonic/gin | Tercero | Framework HTTP |
-| mattn/go-sqlite3 | Tercero | Driver de SQLite |
-| golang-jwt/jwt | Tercero | Emisión de tokens de sesión |
-| golang.org/x/crypto/bcrypt | Oficial | Cifrado de contraseñas |
+### Modo CLI (menú por consola)
 
-## Diagramas
+```bash
+go run ./cmd/leelibre
+```
 
-Los diagramas del sistema en formato editable draw.io están en `docs/diagrams/`. Se pueden abrir y modificar desde [app.diagrams.net](https://app.diagrams.net).
+### Modo servidor REST (servicios web)
 
-## Estado del proyecto
+```bash
+go run ./cmd/server
+```
 
-Este repositorio se encuentra en la **Etapa 1: Planeación del software**. Todavía no contiene código ejecutable. Las carpetas de módulos (`internal/catalogo`, `internal/usuarios`, `internal/prestamos`, `internal/reportes`) están creadas y a la espera de la implementación que se realizará durante la Etapa 2.
+Por defecto escucha en el puerto 8080. Se puede cambiar con la variable de entorno `PORT`:
 
-El documento con la planeación completa (alcance, arquitectura, diagramas, paquetes y cronograma) se encuentra en [`docs/Autonomo #1 Planeacion Cortez Villa Ronny.pdf`](<docs/Autonomo #1 Planeacion Cortez Villa Ronny.pdf>).
+```bash
+PORT=3000 go run ./cmd/server
+```
+
+## Endpoints REST disponibles
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/` | Información del API |
+| `GET` | `/api/libros` | Listar catálogo (soporta `?texto=` y `?categoria=`) |
+| `GET` | `/api/libros/{id}` | Detalle de un libro |
+| `POST` | `/api/libros` | Crear libro |
+| `DELETE` | `/api/libros/{id}` | Eliminar libro |
+| `GET` | `/api/categorias` | Listar categorías |
+| `POST` | `/api/prestamos` | Registrar préstamo (o encolar si no disponible) |
+| `POST` | `/api/prestamos/{id}/devolver` | Devolver un libro |
+| `GET` | `/api/usuarios/{id}/recomendaciones` | Recomendaciones personalizadas |
+| `GET` | `/api/reportes/mas-prestados` | Top de libros más prestados |
+| `GET` | `/api/reservas/{libro_id}` | Ver cola de espera de un libro |
+
+### Ejemplos de uso
+
+```bash
+# Listar todos los libros
+curl http://localhost:8080/api/libros
+
+# Buscar libros por texto
+curl "http://localhost:8080/api/libros?texto=cosmos"
+
+# Ver recomendaciones para Ana (usuario 2)
+curl http://localhost:8080/api/usuarios/2/recomendaciones
+
+# Registrar un préstamo
+curl -X POST http://localhost:8080/api/prestamos \
+  -H "Content-Type: application/json" \
+  -d '{"usuario_id": 2, "libro_id": 5}'
+
+# Devolver un préstamo
+curl -X POST http://localhost:8080/api/prestamos/1/devolver
+```
+
+## Usuarios de prueba
+
+| Correo | Contraseña | Rol | Perfil |
+|---|---|---|---|
+| `ronny@leelibre.ec` | `ronny123` | Administrador | — |
+| `ana@leelibre.ec` | `ana123` | Lector | Ficción |
+| `carlos@leelibre.ec` | `carlos123` | Lector | Ciencia |
+| `maria@leelibre.ec` | `maria123` | Lector | Historia/Filosofía |
+| `juan@leelibre.ec` | `juan123` | Lector | Tecnología |
+
+## Conceptos de POO aplicados
+
+Este proyecto implementa los temas de las **4 unidades** de la asignatura:
+
+- **Unidad 1** — Sintaxis, condicionales, funciones, imports: todo el código
+- **Unidad 2** — Arrays, slices, maps, structs, métodos, constructores: todos los paquetes
+- **Unidad 3** — Encapsulación por paquete, getters idiomáticos, manejo de errores con `errors.Is`, interfaces con polimorfismo
+- **Unidad 4** — Servicios web REST con `net/http`, serialización JSON con `encoding/json`, patrón middleware
+
+### Estructuras de datos
+
+- **Slice** — catálogo de libros, historial de préstamos
+- **Map** — índices por id, perfil de lector del recomendador
+- **Cola FIFO** — cola de reservas cuando un libro no está disponible (paquete `reservas`)
+
+### Polimorfismo
+
+La interface `Reportador` en `internal/reportes/reportador.go` es implementada por:
+- `MasPrestados` (`internal/reportes/mas_prestados.go`)
+- `Recomendador` (`internal/reportes/recomendador.go`)
+
+Ambos se usan de forma uniforme desde CLI y API sin conocer el tipo concreto.
+
+## Funcionalidad no básica
+
+El **recomendador personalizado** (`internal/reportes/recomendador.go`) analiza el historial del usuario, construye su perfil de lector (map de categorías), y sugiere libros no leídos con un score de coincidencia. Es la funcionalidad estrella que va más allá del CRUD básico.
+
+## Trazabilidad con la Etapa 1
+
+| Planificado en Etapa 1 | Implementado en Etapa 2 |
+|---|---|
+| Arquitectura por capas | ✅ Paquetes internos + `api/` como capa web |
+| Servicios web con JSON | ✅ `net/http` + 10 endpoints REST |
+| Módulo de catálogo | ✅ `internal/catalogo/` |
+| Módulo de usuarios | ✅ `internal/usuarios/` con roles |
+| Módulo de préstamos | ✅ `internal/prestamos/` con estados |
+| Módulo de reportes | ✅ `internal/reportes/` con interface |
+| Manejo de errores | ✅ `internal/errores/` con `errors.Is` |
+| Rama "libro no disponible" del diagrama de flujo | ✅ `internal/reservas/` (cola FIFO) |
 
 ## Autor
 
-Cortez Villa Ronny.
+**Cortez Villa Ronny** — Estudiante de tercer semestre
+Universidad Internacional del Ecuador
 
 ## Licencia
 
