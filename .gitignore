@@ -30,3 +30,14 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Binarios compilados en la raíz por `go build ./cmd/...`
+# (la lista de arriba solo cubre Windows: *.exe)
+/server
+/leelibre
+
+# Archivos temporales de la escritura atómica de internal/persistencia
+*.tmp
+
+# Datos generados en tiempo de ejecución (no son semilla del repositorio)
+data/prestamos.json
