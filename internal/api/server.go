@@ -233,18 +233,26 @@ func (s *Server) conAdmin(siguiente handlerAutenticado) http.HandlerFunc {
 // ---------------------------------------------------------------------
 
 // raiz responde con información básica del API.
+//
+// Esta lista se escribe a mano porque http.ServeMux no permite consultar las
+// rutas que tiene registradas. Es decir, está duplicada respecto a Rutas(): al
+// agregar o quitar un endpoint allí, hay que actualizarla también aquí o el
+// API acabará anunciando algo distinto de lo que ofrece.
 func (s *Server) raiz(w http.ResponseWriter, r *http.Request) {
 	info := map[string]interface{}{
-		"servicio": "LeeLibre API",
-		"version":  "1.0.0",
+		"servicio":      "LeeLibre API",
+		"version":       "1.1.0",
+		"autenticacion": "HTTP Basic en los endpoints marcados; el resto son públicos",
 		"endpoints": []string{
+			"GET    /",
 			"GET    /api/libros",
 			"GET    /api/libros/{id}",
-			"POST   /api/libros",
-			"DELETE /api/libros/{id}",
+			"POST   /api/libros                        (administrador)",
+			"PUT    /api/libros/{id}                   (administrador)",
+			"DELETE /api/libros/{id}                   (administrador)",
 			"GET    /api/categorias",
-			"POST   /api/prestamos",
-			"POST   /api/prestamos/{id}/devolver",
+			"POST   /api/prestamos                     (autenticado)",
+			"POST   /api/prestamos/{id}/devolver       (dueño o administrador)",
 			"GET    /api/usuarios/{id}/recomendaciones",
 			"GET    /api/reportes/mas-prestados",
 			"GET    /api/reservas/{libro_id}",
