@@ -1,0 +1,12 @@
+[
+  {"id": 1,  "nombre": "Cortez Villa Ronny", "correo": "ronny@leelibre.ec",  "password": "ronny123", "rol": "administrador"},
+  {"id": 2,  "nombre": "Ana Martínez",       "correo": "ana@leelibre.ec",    "password": "ana123",   "rol": "lector"},
+  {"id": 3,  "nombre": "Carlos Vega",        "correo": "carlos@leelibre.ec", "password": "carlos123","rol": "lector"},
+  {"id": 4,  "nombre": "María López",        "correo": "maria@leelibre.ec",  "password": "maria123", "rol": "lector"},
+  {"id": 5,  "nombre": "Juan Ramírez",       "correo": "juan@leelibre.ec",   "password": "juan123",  "rol": "lector"},
+  {"id": 6,  "nombre": "Sofía Peña",         "correo": "sofia@leelibre.ec",  "password": "sofia123", "rol": "lector"},
+  {"id": 7,  "nombre": "Diego Torres",       "correo": "diego@leelibre.ec",  "password": "diego123", "rol": "lector"},
+  {"id": 8,  "nombre": "Laura Cruz",         "correo": "laura@leelibre.ec",  "password": "laura123", "rol": "lector"},
+  {"id": 9,  "nombre": "Pedro Morales",      "correo": "pedro@leelibre.ec",  "password": "pedro123", "rol": "lector"},
+  {"id": 10, "nombre": "Elena Salazar",      "correo": "elena@leelibre.ec",  "password": "elena123", "rol": "administrador"}
+]

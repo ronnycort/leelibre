@@ -1,0 +1,9 @@
+[
+  {"id": 1, "nombre": "Ficción"},
+  {"id": 2, "nombre": "Ciencia"},
+  {"id": 3, "nombre": "Historia"},
+  {"id": 4, "nombre": "Filosofía"},
+  {"id": 5, "nombre": "Tecnología"},
+  {"id": 6, "nombre": "Biografía"},
+  {"id": 7, "nombre": "Poesía"}
+]
