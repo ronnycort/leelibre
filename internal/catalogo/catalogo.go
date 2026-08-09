@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/ronnycort/leelibre/internal/errores"
 )
@@ -14,6 +15,12 @@ import (
 // Los slices y maps internos son privados para que nadie los modifique
 // desde fuera sin pasar por los métodos que garantizan consistencia.
 type Catalogo struct {
+	// El servidor HTTP atiende cada petición en una goroutine distinta, así
+	// que dos peticiones pueden agregar o eliminar libros a la vez. Un slice
+	// y un map no son seguros para uso concurrente, por lo que todo acceso
+	// pasa por este candado: RLock para consultar (varios lectores a la vez)
+	// y Lock para modificar (un único escritor, sin lectores).
+	mu         sync.RWMutex
 	libros     []*Libro
 	categorias map[int]*Categoria // índice por id para búsquedas rápidas
 }
@@ -29,6 +36,8 @@ func NewCatalogo() *Catalogo {
 // AgregarCategoria incorpora una categoría al catálogo.
 // Retorna error si ya existe una con el mismo id.
 func (c *Catalogo) AgregarCategoria(cat *Categoria) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if _, existe := c.categorias[cat.ID()]; existe {
 		return fmt.Errorf("%w: ya existe una categoría con id %d",
 			errores.ErrDatosInvalidos, cat.ID())
@@ -41,6 +50,11 @@ func (c *Catalogo) AgregarCategoria(cat *Categoria) error {
 // del libro exista antes de aceptarlo. Este es un ejemplo de invariante
 // del dominio: un libro no puede pertenecer a una categoría inexistente.
 func (c *Catalogo) AgregarLibro(l *Libro) error {
+	// La verificación de duplicados y el append van bajo el mismo Lock: si se
+	// hicieran por separado, dos peticiones simultáneas podrían comprobar que
+	// el id no existe y añadirlo las dos.
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if _, existe := c.categorias[l.CategoriaID()]; !existe {
 		return fmt.Errorf("%w: la categoría %d no existe",
 			errores.ErrDatosInvalidos, l.CategoriaID())
@@ -58,6 +72,8 @@ func (c *Catalogo) AgregarLibro(l *Libro) error {
 
 // EliminarLibro remueve un libro del catálogo por su id.
 func (c *Catalogo) EliminarLibro(id int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for i, l := range c.libros {
 		if l.ID() == id {
 			// Reemplazar el elemento con el último y acortar el slice.
@@ -72,6 +88,8 @@ func (c *Catalogo) EliminarLibro(id int) error {
 
 // BuscarPorID retorna un libro dado su identificador o error si no existe.
 func (c *Catalogo) BuscarPorID(id int) (*Libro, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	for _, l := range c.libros {
 		if l.ID() == id {
 			return l, nil
@@ -82,6 +100,8 @@ func (c *Catalogo) BuscarPorID(id int) (*Libro, error) {
 
 // CategoriaDe retorna la categoría a la que pertenece el libro dado.
 func (c *Catalogo) CategoriaDe(l *Libro) (*Categoria, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	cat, existe := c.categorias[l.CategoriaID()]
 	if !existe {
 		return nil, errores.ErrDatosInvalidos
@@ -93,7 +113,13 @@ func (c *Catalogo) CategoriaDe(l *Libro) (*Categoria, error) {
 // Recibe una función como parámetro, aprovechando que en Go las funciones
 // son valores de primera clase. Es un método que expone una operación
 // flexible sin comprometer la encapsulación del slice interno.
+// Es el único punto que recorre el slice al filtrar, así que basta con que
+// tome aquí el candado: BuscarPorTexto, PorCategoria y Disponibles se apoyan
+// en él y por eso no vuelven a pedirlo (RWMutex no es reentrante y pedirlo
+// dos veces desde la misma goroutina podría bloquear el programa).
 func (c *Catalogo) Filtrar(cumple func(*Libro) bool) []*Libro {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	resultado := make([]*Libro, 0)
 	for _, l := range c.libros {
 		if cumple(l) {
@@ -132,6 +158,8 @@ func (c *Catalogo) Disponibles() []*Libro {
 // para respetar la encapsulación: si retornáramos el slice interno,
 // el llamante podría reordenarlo o mutarlo.
 func (c *Catalogo) Todos() []*Libro {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	copia := make([]*Libro, len(c.libros))
 	copy(copia, c.libros)
 	return copia
@@ -139,6 +167,8 @@ func (c *Catalogo) Todos() []*Libro {
 
 // TodasCategorias devuelve una copia de las categorías disponibles.
 func (c *Catalogo) TodasCategorias() []*Categoria {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	cats := make([]*Categoria, 0, len(c.categorias))
 	for _, cat := range c.categorias {
 		cats = append(cats, cat)
@@ -148,6 +178,8 @@ func (c *Catalogo) TodasCategorias() []*Categoria {
 
 // Cantidad retorna el número total de libros en el catálogo.
 func (c *Catalogo) Cantidad() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return len(c.libros)
 }
 

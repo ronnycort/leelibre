@@ -2,6 +2,7 @@ package catalogo
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/ronnycort/leelibre/internal/errores"
 )
@@ -32,7 +33,14 @@ type Libro struct {
 	categoriaID int
 	anio        int
 	formato     Formato
-	disponible  bool
+
+	// disponible es el único campo que cambia después de construir el libro,
+	// así que es el único que necesita protección: el servidor HTTP atiende
+	// cada petición en su propia goroutine y varias pueden prestar o devolver
+	// el mismo libro a la vez. Los demás campos son inmutables tras el
+	// constructor y por eso sus getters no toman el candado.
+	mu         sync.RWMutex
+	disponible bool
 }
 
 // NewLibro es el constructor. Retorna un puntero al libro creado o un
@@ -85,12 +93,24 @@ func (l *Libro) Anio() int { return l.anio }
 func (l *Libro) Formato() Formato { return l.formato }
 
 // Disponible indica si el libro puede ser prestado en este momento.
-func (l *Libro) Disponible() bool { return l.disponible }
+// Toma el candado en modo lectura: varias goroutines pueden consultar a la
+// vez, pero ninguna lo hará mientras Prestar o Devolver estén escribiendo.
+func (l *Libro) Disponible() bool {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.disponible
+}
 
 // Prestar marca el libro como no disponible. Usa pointer receiver porque
 // modifica el estado interno del libro; con value receiver se trabajaría
 // sobre una copia y el cambio no se reflejaría en el original.
+// La comprobación y la escritura van dentro del mismo Lock a propósito: si
+// se consultara Disponible() y luego se escribiera en dos pasos separados,
+// dos goroutines podrían leer "disponible" a la vez y prestar ambas el mismo
+// libro.
 func (l *Libro) Prestar() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if !l.disponible {
 		return errores.ErrLibroNoDisponible
 	}
@@ -101,6 +121,8 @@ func (l *Libro) Prestar() error {
 // Devolver marca el libro como disponible de nuevo. También es pointer
 // receiver por el mismo motivo que Prestar.
 func (l *Libro) Devolver() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.disponible = true
 }
 
@@ -110,7 +132,7 @@ func (l *Libro) Devolver() {
 // como un Stringer.
 func (l *Libro) String() string {
 	estado := "disponible"
-	if !l.disponible {
+	if !l.Disponible() {
 		estado = "prestado"
 	}
 	return fmt.Sprintf("[%d] %s — %s (%d, %s) — %s",
