@@ -260,11 +260,12 @@ func (a *App) menuAdministrador() {
 		fmt.Println("\n--- Menú de administrador ---")
 		fmt.Println("  1. Ver catálogo")
 		fmt.Println("  2. Agregar libro")
-		fmt.Println("  3. Eliminar libro")
-		fmt.Println("  4. Ver reporte de libros más prestados")
-		fmt.Println("  5. Ver todos los préstamos activos")
-		fmt.Println("  6. Ver reservas activas")
-		fmt.Println("  7. Cerrar sesión")
+		fmt.Println("  3. Editar libro")
+		fmt.Println("  4. Eliminar libro")
+		fmt.Println("  5. Ver reporte de libros más prestados")
+		fmt.Println("  6. Ver todos los préstamos activos")
+		fmt.Println("  7. Ver reservas activas")
+		fmt.Println("  8. Cerrar sesión")
 		opcion := a.leerLinea("Opción: ")
 
 		switch opcion {
@@ -273,14 +274,16 @@ func (a *App) menuAdministrador() {
 		case "2":
 			a.agregarLibro()
 		case "3":
-			a.eliminarLibro()
+			a.editarLibro()
 		case "4":
-			a.verReporteMasPrestados()
+			a.eliminarLibro()
 		case "5":
-			a.verPrestamosActivos()
+			a.verReporteMasPrestados()
 		case "6":
-			a.verReservasActivas()
+			a.verPrestamosActivos()
 		case "7":
+			a.verReservasActivas()
+		case "8":
 			fmt.Println("Sesión cerrada.")
 			return
 		default:
@@ -501,6 +504,60 @@ func (a *App) agregarLibro() {
 		return
 	}
 	fmt.Println("Libro agregado con éxito.")
+	a.guardarCambios()
+}
+
+// editarLibro modifica un libro ya existente. Cada dato se pide por separado
+// y se deja en blanco para conservarlo, de modo que se puede corregir solo el
+// año sin volver a teclear el título.
+//
+// Los cambios pasan por los setters del libro, que son los que aplican las
+// reglas del dominio: si el año está fuera de rango, el setter lo rechaza y
+// el libro se queda como estaba.
+func (a *App) editarLibro() {
+	id, err := a.leerEntero("ID del libro a editar: ")
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	libro, err := a.catalogo.BuscarPorID(id)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	fmt.Printf("\nEditando: %s\n", libro)
+	fmt.Println("(dejar en blanco para no cambiar el dato)")
+
+	if nuevo := a.leerLinea(fmt.Sprintf("Título [%s]: ", libro.Titulo())); nuevo != "" {
+		if err := libro.SetTitulo(nuevo); err != nil {
+			fmt.Printf("Datos inválidos: %v\n", err)
+			return
+		}
+	}
+	if nuevo := a.leerLinea(fmt.Sprintf("Autor [%s]: ", libro.Autor())); nuevo != "" {
+		if err := libro.SetAutor(nuevo); err != nil {
+			fmt.Printf("Datos inválidos: %v\n", err)
+			return
+		}
+	}
+	if nuevo := a.leerLinea(fmt.Sprintf("Año [%d]: ", libro.Anio())); nuevo != "" {
+		anio, err := strconv.Atoi(nuevo)
+		if err != nil {
+			fmt.Println("El año debe ser un número.")
+			return
+		}
+		if err := libro.SetAnio(anio); err != nil {
+			fmt.Printf("Datos inválidos: %v\n", err)
+			return
+		}
+	}
+	if nuevo := a.leerLinea(fmt.Sprintf("Formato PDF/EPUB [%s]: ", libro.Formato())); nuevo != "" {
+		if err := libro.SetFormato(catalogo.Formato(nuevo)); err != nil {
+			fmt.Printf("Datos inválidos: %v\n", err)
+			return
+		}
+	}
+	fmt.Printf("Libro actualizado: %s\n", libro)
 	a.guardarCambios()
 }
 

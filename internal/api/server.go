@@ -70,6 +70,9 @@ func (s *Server) Rutas() *http.ServeMux {
 	// Endpoint 4: DELETE /api/libros/{id} - eliminar un libro (solo administrador)
 	mux.HandleFunc("DELETE /api/libros/{id}", s.conAdmin(s.eliminarLibro))
 
+	// Endpoint 5: PUT /api/libros/{id} - modificar un libro (solo administrador)
+	mux.HandleFunc("PUT /api/libros/{id}", s.conAdmin(s.actualizarLibro))
+
 	// Endpoint 5: GET /api/usuarios/{id}/recomendaciones - recomendador
 	mux.HandleFunc("GET /api/usuarios/{id}/recomendaciones", s.recomendaciones)
 
@@ -314,6 +317,64 @@ func (s *Server) crearLibro(w http.ResponseWriter, r *http.Request, _ *usuarios.
 		return
 	}
 	enviarJSON(w, http.StatusCreated, libroADTO(libro))
+}
+
+// actualizarLibro - PUT /api/libros/{id}
+// Body: cualquier subconjunto de {"titulo", "autor", "anio", "formato"}.
+//
+// Los campos se reciben como punteros para distinguir "no lo envíes" de
+// "ponlo vacío": si llegaran como valores normales, un título ausente sería
+// indistinguible de un título en blanco y se sobrescribiría sin querer.
+//
+// La validación no se repite aquí: cada setter del dominio aplica su propia
+// regla y devuelve el error, de modo que la capa web solo lo traduce a un
+// código HTTP.
+func (s *Server) actualizarLibro(w http.ResponseWriter, r *http.Request, _ *usuarios.Usuario) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		enviarError(w, http.StatusBadRequest, "id debe ser un número")
+		return
+	}
+	libro, err := s.catalogo.BuscarPorID(id)
+	if err != nil {
+		enviarError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	var entrada struct {
+		Titulo  *string `json:"titulo"`
+		Autor   *string `json:"autor"`
+		Anio    *int    `json:"anio"`
+		Formato *string `json:"formato"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&entrada); err != nil {
+		enviarError(w, http.StatusBadRequest, "JSON inválido: "+err.Error())
+		return
+	}
+	if entrada.Titulo != nil {
+		if err := libro.SetTitulo(*entrada.Titulo); err != nil {
+			enviarError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if entrada.Autor != nil {
+		if err := libro.SetAutor(*entrada.Autor); err != nil {
+			enviarError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if entrada.Anio != nil {
+		if err := libro.SetAnio(*entrada.Anio); err != nil {
+			enviarError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if entrada.Formato != nil {
+		if err := libro.SetFormato(catalogo.Formato(*entrada.Formato)); err != nil {
+			enviarError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	enviarJSON(w, http.StatusOK, libroADTO(libro))
 }
 
 // eliminarLibro - DELETE /api/libros/{id}

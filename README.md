@@ -75,6 +75,7 @@ PORT=3000 go run ./cmd/server
 | `GET` | `/api/libros` | Listar catálogo (soporta `?texto=` y `?categoria=`) | Público |
 | `GET` | `/api/libros/{id}` | Detalle de un libro | Público |
 | `POST` | `/api/libros` | Crear libro | **Administrador** |
+| `PUT` | `/api/libros/{id}` | Modificar título, autor, año o formato | **Administrador** |
 | `DELETE` | `/api/libros/{id}` | Eliminar libro | **Administrador** |
 | `GET` | `/api/categorias` | Listar categorías | Público |
 | `POST` | `/api/prestamos` | Registrar préstamo (o encolar si no disponible) | **Autenticado** |
@@ -119,6 +120,12 @@ curl -X POST http://localhost:8080/api/prestamos \
 curl -X POST http://localhost:8080/api/prestamos/1/devolver \
   -u ana@leelibre.ec:ana123
 
+# Modificar un libro: solo los campos enviados cambian (solo administrador)
+curl -X PUT http://localhost:8080/api/libros/1 \
+  -u ronny@leelibre.ec:ronny123 \
+  -H "Content-Type: application/json" \
+  -d '{"anio": 1970}'
+
 # Crear un libro (solo administrador)
 curl -X POST http://localhost:8080/api/libros \
   -u ronny@leelibre.ec:ronny123 \
@@ -142,7 +149,7 @@ Este proyecto implementa los temas de las **4 unidades** de la asignatura:
 
 - **Unidad 1** — Sintaxis, condicionales, funciones, imports: todo el código
 - **Unidad 2** — Arrays, slices, maps, structs, métodos, constructores: todos los paquetes
-- **Unidad 3** — Encapsulación por paquete, getters idiomáticos, manejo de errores con `errors.Is`, interfaces con polimorfismo
+- **Unidad 3** — Encapsulación por paquete, getters idiomáticos, **setters con validación de invariantes**, manejo de errores con `errors.Is`, interfaces con polimorfismo
 - **Unidad 4** — Servicios web REST con `net/http`, serialización JSON con `encoding/json`, patrón middleware
 
 ### Estructuras de datos

@@ -2,6 +2,7 @@ package catalogo
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/ronnycort/leelibre/internal/errores"
@@ -27,19 +28,20 @@ func (f Formato) EsValido() bool {
 // encapsulación pura: nadie fuera del paquete puede modificar el estado
 // del libro sin pasar por los métodos que este define.
 type Libro struct {
+	// id y categoriaID no cambian nunca después del constructor, así que sus
+	// getters pueden leerlos sin candado.
 	id          int
-	titulo      string
-	autor       string
 	categoriaID int
-	anio        int
-	formato     Formato
 
-	// disponible es el único campo que cambia después de construir el libro,
-	// así que es el único que necesita protección: el servidor HTTP atiende
-	// cada petición en su propia goroutine y varias pueden prestar o devolver
-	// el mismo libro a la vez. Los demás campos son inmutables tras el
-	// constructor y por eso sus getters no toman el candado.
+	// El resto sí cambia: el título, el autor, el año y el formato mediante
+	// los setters, y disponible al prestar o devolver. Como el servidor HTTP
+	// atiende cada petición en su propia goroutine, todos los accesos a estos
+	// campos pasan por el candado.
 	mu         sync.RWMutex
+	titulo     string
+	autor      string
+	anio       int
+	formato    Formato
 	disponible bool
 }
 
@@ -78,19 +80,94 @@ func NewLibro(id int, titulo, autor string, categoriaID, anio int, formato Forma
 func (l *Libro) ID() int { return l.id }
 
 // Titulo retorna el título del libro.
-func (l *Libro) Titulo() string { return l.titulo }
+func (l *Libro) Titulo() string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.titulo
+}
 
 // Autor retorna el nombre del autor.
-func (l *Libro) Autor() string { return l.autor }
+func (l *Libro) Autor() string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.autor
+}
 
 // CategoriaID retorna el identificador de la categoría a la que pertenece.
 func (l *Libro) CategoriaID() int { return l.categoriaID }
 
 // Anio retorna el año de publicación.
-func (l *Libro) Anio() int { return l.anio }
+func (l *Libro) Anio() int {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.anio
+}
 
 // Formato retorna el formato del libro.
-func (l *Libro) Formato() Formato { return l.formato }
+func (l *Libro) Formato() Formato {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.formato
+}
+
+// Setters con validación.
+//
+// La razón de que estos campos sean privados y solo se toquen desde aquí es
+// precisamente esta: el setter puede rechazar un valor que rompería una regla
+// del dominio. Si fueran públicos, cualquiera podría dejar un libro con el
+// título vacío o con año 3500, y el objeto quedaría en un estado imposible.
+//
+// Las reglas son las mismas que aplica NewLibro, para que un libro creado y
+// uno modificado cumplan siempre las mismas condiciones. Todos usan pointer
+// receiver: con value receiver se modificaría una copia y el cambio se
+// perdería al terminar el método.
+
+// SetTitulo cambia el título. Rechaza el vacío.
+func (l *Libro) SetTitulo(nuevo string) error {
+	if strings.TrimSpace(nuevo) == "" {
+		return fmt.Errorf("%w: el título no puede estar vacío", errores.ErrDatosInvalidos)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.titulo = nuevo
+	return nil
+}
+
+// SetAutor cambia el autor. Rechaza el vacío.
+func (l *Libro) SetAutor(nuevo string) error {
+	if strings.TrimSpace(nuevo) == "" {
+		return fmt.Errorf("%w: el autor no puede estar vacío", errores.ErrDatosInvalidos)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.autor = nuevo
+	return nil
+}
+
+// SetAnio cambia el año de publicación, dentro del mismo rango que exige el
+// constructor.
+func (l *Libro) SetAnio(nuevo int) error {
+	if nuevo < 1000 || nuevo > 2100 {
+		return fmt.Errorf("%w: el año debe estar entre 1000 y 2100, se recibió %d",
+			errores.ErrDatosInvalidos, nuevo)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.anio = nuevo
+	return nil
+}
+
+// SetFormato cambia el formato, que solo puede ser PDF o EPUB.
+func (l *Libro) SetFormato(nuevo Formato) error {
+	if !nuevo.EsValido() {
+		return fmt.Errorf("%w: formato debe ser PDF o EPUB, se recibió %q",
+			errores.ErrDatosInvalidos, nuevo)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.formato = nuevo
+	return nil
+}
 
 // Disponible indica si el libro puede ser prestado en este momento.
 // Toma el candado en modo lectura: varias goroutines pueden consultar a la
