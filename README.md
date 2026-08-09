@@ -52,7 +52,7 @@ Los diagramas del sistema en formato editable draw.io están en `docs/diagrams/`
 
 Este repositorio se encuentra en la **Etapa 1: Planeación del software**. Todavía no contiene código ejecutable. Las carpetas de módulos (`internal/catalogo`, `internal/usuarios`, `internal/prestamos`, `internal/reportes`) están creadas y a la espera de la implementación que se realizará durante la Etapa 2.
 
-El documento con la planeación completa (alcance, arquitectura, diagramas, paquetes y cronograma) se encuentra en `docs/etapa1_planeacion.pdf`.
+El documento con la planeación completa (alcance, arquitectura, diagramas, paquetes y cronograma) se encuentra en [`docs/Autonomo #1 Planeacion Cortez Villa Ronny.pdf`](<docs/Autonomo #1 Planeacion Cortez Villa Ronny.pdf>).
 
 ## Autor
 
