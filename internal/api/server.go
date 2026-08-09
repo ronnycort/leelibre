@@ -64,20 +64,22 @@ func (s *Server) Rutas() *http.ServeMux {
 	// Endpoint 2: GET /api/libros/{id} - obtener un libro específico
 	mux.HandleFunc("GET /api/libros/{id}", s.obtenerLibro)
 
-	// Endpoint 3: POST /api/libros - agregar un libro (admin)
-	mux.HandleFunc("POST /api/libros", s.crearLibro)
+	// Endpoint 3: POST /api/libros - agregar un libro (solo administrador)
+	mux.HandleFunc("POST /api/libros", s.conAdmin(s.crearLibro))
 
-	// Endpoint 4: DELETE /api/libros/{id} - eliminar un libro (admin)
-	mux.HandleFunc("DELETE /api/libros/{id}", s.eliminarLibro)
+	// Endpoint 4: DELETE /api/libros/{id} - eliminar un libro (solo administrador)
+	mux.HandleFunc("DELETE /api/libros/{id}", s.conAdmin(s.eliminarLibro))
 
 	// Endpoint 5: GET /api/usuarios/{id}/recomendaciones - recomendador
 	mux.HandleFunc("GET /api/usuarios/{id}/recomendaciones", s.recomendaciones)
 
 	// Endpoint 6: POST /api/prestamos - registrar un préstamo o reserva
-	mux.HandleFunc("POST /api/prestamos", s.crearPrestamo)
+	// (requiere sesión: el préstamo se registra a nombre de quien se autentica)
+	mux.HandleFunc("POST /api/prestamos", s.conAuth(s.crearPrestamo))
 
 	// Endpoint 7: POST /api/prestamos/{id}/devolver - devolver un libro
-	mux.HandleFunc("POST /api/prestamos/{id}/devolver", s.devolverPrestamo)
+	// (requiere sesión: solo el dueño del préstamo o un administrador)
+	mux.HandleFunc("POST /api/prestamos/{id}/devolver", s.conAuth(s.devolverPrestamo))
 
 	// Endpoint 8: GET /api/reportes/mas-prestados - reporte top N
 	mux.HandleFunc("GET /api/reportes/mas-prestados", s.reporteMasPrestados)
@@ -173,6 +175,57 @@ func enviarError(w http.ResponseWriter, codigo int, mensaje string) {
 }
 
 // ---------------------------------------------------------------------
+// Middleware de autenticación
+// ---------------------------------------------------------------------
+
+// handlerAutenticado es como un http.HandlerFunc pero recibe además el
+// usuario que ya fue identificado. Gracias a este tipo, los handlers
+// protegidos no repiten la comprobación de credenciales: cuando se ejecutan,
+// el usuario ya es de fiar.
+type handlerAutenticado func(http.ResponseWriter, *http.Request, *usuarios.Usuario)
+
+// conAuth envuelve un handler para exigir credenciales válidas. Es el patrón
+// middleware: una función que recibe un handler y devuelve otro handler con
+// comportamiento añadido alrededor del original.
+//
+// Se usa autenticación básica de HTTP (r.BasicAuth) porque viene en la
+// biblioteca estándar y no obliga a inventar un formato propio de token.
+func (s *Server) conAuth(siguiente handlerAutenticado) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		correo, password, ok := r.BasicAuth()
+		if !ok {
+			// El header se escribe antes que el cuerpo: una vez enviado el
+			// código de estado ya no se pueden añadir cabeceras.
+			w.Header().Set("WWW-Authenticate", `Basic realm="LeeLibre"`)
+			enviarError(w, http.StatusUnauthorized, "se requieren credenciales")
+			return
+		}
+		u, err := s.autenticador.Autenticar(correo, password)
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", `Basic realm="LeeLibre"`)
+			// Se reenvía el error del autenticador tal cual, que no distingue
+			// entre correo inexistente y contraseña incorrecta a propósito.
+			enviarError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		siguiente(w, r, u)
+	}
+}
+
+// conAdmin exige, además de credenciales válidas, el rol de administrador.
+// Se construye reutilizando conAuth en lugar de repetir su lógica: primero
+// se resuelve quién es (401 si no se sabe) y después si puede (403 si no).
+func (s *Server) conAdmin(siguiente handlerAutenticado) http.HandlerFunc {
+	return s.conAuth(func(w http.ResponseWriter, r *http.Request, u *usuarios.Usuario) {
+		if !u.EsAdministrador() {
+			enviarError(w, http.StatusForbidden, "se requiere rol de administrador")
+			return
+		}
+		siguiente(w, r, u)
+	})
+}
+
+// ---------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------
 
@@ -240,7 +293,9 @@ func (s *Server) obtenerLibro(w http.ResponseWriter, r *http.Request) {
 }
 
 // crearLibro - POST /api/libros
-func (s *Server) crearLibro(w http.ResponseWriter, r *http.Request) {
+// El tercer parámetro es el administrador que realiza la operación; no se
+// usa aquí, pero la firma es la que exige conAdmin.
+func (s *Server) crearLibro(w http.ResponseWriter, r *http.Request, _ *usuarios.Usuario) {
 	var entrada libroDTO
 	if err := json.NewDecoder(r.Body).Decode(&entrada); err != nil {
 		enviarError(w, http.StatusBadRequest, "JSON inválido: "+err.Error())
@@ -262,7 +317,7 @@ func (s *Server) crearLibro(w http.ResponseWriter, r *http.Request) {
 }
 
 // eliminarLibro - DELETE /api/libros/{id}
-func (s *Server) eliminarLibro(w http.ResponseWriter, r *http.Request) {
+func (s *Server) eliminarLibro(w http.ResponseWriter, r *http.Request, _ *usuarios.Usuario) {
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		enviarError(w, http.StatusBadRequest, "id debe ser un número")
@@ -307,20 +362,20 @@ func (s *Server) recomendaciones(w http.ResponseWriter, r *http.Request) {
 }
 
 // crearPrestamo - POST /api/prestamos
-// Body: {"usuario_id": N, "libro_id": M}
+// Body: {"libro_id": M}
 // Si el libro está disponible: crea un préstamo.
 // Si no está disponible: agrega al usuario a la cola de reservas.
-func (s *Server) crearPrestamo(w http.ResponseWriter, r *http.Request) {
+//
+// El préstamo se registra siempre a nombre de quien se autentica, no de un
+// usuario_id enviado en el cuerpo: si el cliente pudiera elegirlo, cualquiera
+// podría pedir libros a nombre de otra persona. Por eso ya no se valida que
+// el usuario exista, porque autenticarse lo demuestra.
+func (s *Server) crearPrestamo(w http.ResponseWriter, r *http.Request, actor *usuarios.Usuario) {
 	var entrada struct {
-		UsuarioID int `json:"usuario_id"`
-		LibroID   int `json:"libro_id"`
+		LibroID int `json:"libro_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&entrada); err != nil {
 		enviarError(w, http.StatusBadRequest, "JSON inválido")
-		return
-	}
-	if _, err := s.autenticador.BuscarPorID(entrada.UsuarioID); err != nil {
-		enviarError(w, http.StatusNotFound, err.Error())
 		return
 	}
 	libro, err := s.catalogo.BuscarPorID(entrada.LibroID)
@@ -331,11 +386,11 @@ func (s *Server) crearPrestamo(w http.ResponseWriter, r *http.Request) {
 
 	if !libro.Disponible() {
 		// Rama del diagrama: no disponible -> cola de reservas
-		if err := s.gestorReservas.Reservar(entrada.LibroID, entrada.UsuarioID); err != nil {
+		if err := s.gestorReservas.Reservar(entrada.LibroID, actor.ID()); err != nil {
 			enviarError(w, http.StatusConflict, err.Error())
 			return
 		}
-		pos := s.gestorReservas.PosicionEnCola(entrada.LibroID, entrada.UsuarioID)
+		pos := s.gestorReservas.PosicionEnCola(entrada.LibroID, actor.ID())
 		enviarJSON(w, http.StatusAccepted, map[string]interface{}{
 			"mensaje":  "libro no disponible, agregado a la cola de reservas",
 			"posicion": pos,
@@ -348,7 +403,7 @@ func (s *Server) crearPrestamo(w http.ResponseWriter, r *http.Request) {
 		enviarError(w, http.StatusConflict, err.Error())
 		return
 	}
-	p, err := s.historial.Registrar(entrada.UsuarioID, entrada.LibroID)
+	p, err := s.historial.Registrar(actor.ID(), entrada.LibroID)
 	if err != nil {
 		libro.Devolver()
 		enviarError(w, http.StatusInternalServerError, err.Error())
@@ -358,7 +413,7 @@ func (s *Server) crearPrestamo(w http.ResponseWriter, r *http.Request) {
 }
 
 // devolverPrestamo - POST /api/prestamos/{id}/devolver
-func (s *Server) devolverPrestamo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) devolverPrestamo(w http.ResponseWriter, r *http.Request, actor *usuarios.Usuario) {
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		enviarError(w, http.StatusBadRequest, "id debe ser un número")
@@ -367,6 +422,13 @@ func (s *Server) devolverPrestamo(w http.ResponseWriter, r *http.Request) {
 	p, err := s.historial.BuscarPorID(id)
 	if err != nil {
 		enviarError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	// Autenticarse no basta: hay que ser el dueño del préstamo. De lo
+	// contrario, cualquier lector podría devolver los libros de los demás.
+	// El administrador queda exento porque gestiona el catálogo completo.
+	if p.UsuarioID() != actor.ID() && !actor.EsAdministrador() {
+		enviarError(w, http.StatusForbidden, "el préstamo pertenece a otro usuario")
 		return
 	}
 	if err := p.Devolver(); err != nil {

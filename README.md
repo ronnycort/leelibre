@@ -69,19 +69,33 @@ PORT=3000 go run ./cmd/server
 
 ## Endpoints REST disponibles
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/` | Información del API |
-| `GET` | `/api/libros` | Listar catálogo (soporta `?texto=` y `?categoria=`) |
-| `GET` | `/api/libros/{id}` | Detalle de un libro |
-| `POST` | `/api/libros` | Crear libro |
-| `DELETE` | `/api/libros/{id}` | Eliminar libro |
-| `GET` | `/api/categorias` | Listar categorías |
-| `POST` | `/api/prestamos` | Registrar préstamo (o encolar si no disponible) |
-| `POST` | `/api/prestamos/{id}/devolver` | Devolver un libro |
-| `GET` | `/api/usuarios/{id}/recomendaciones` | Recomendaciones personalizadas |
-| `GET` | `/api/reportes/mas-prestados` | Top de libros más prestados |
-| `GET` | `/api/reservas/{libro_id}` | Ver cola de espera de un libro |
+| Método | Ruta | Descripción | Acceso |
+|---|---|---|---|
+| `GET` | `/` | Información del API | Público |
+| `GET` | `/api/libros` | Listar catálogo (soporta `?texto=` y `?categoria=`) | Público |
+| `GET` | `/api/libros/{id}` | Detalle de un libro | Público |
+| `POST` | `/api/libros` | Crear libro | **Administrador** |
+| `DELETE` | `/api/libros/{id}` | Eliminar libro | **Administrador** |
+| `GET` | `/api/categorias` | Listar categorías | Público |
+| `POST` | `/api/prestamos` | Registrar préstamo (o encolar si no disponible) | **Autenticado** |
+| `POST` | `/api/prestamos/{id}/devolver` | Devolver un libro | **Dueño o administrador** |
+| `GET` | `/api/usuarios/{id}/recomendaciones` | Recomendaciones personalizadas | Público |
+| `GET` | `/api/reportes/mas-prestados` | Top de libros más prestados | Público |
+| `GET` | `/api/reservas/{libro_id}` | Ver cola de espera de un libro | Público |
+
+### Autenticación
+
+Los endpoints protegidos usan **autenticación básica de HTTP**, resuelta con un
+middleware sobre `r.BasicAuth()` de la biblioteca estándar. En `curl` basta
+con `-u correo:contraseña`.
+
+- Sin credenciales o con credenciales incorrectas: **401**.
+- Autenticado pero sin permiso (un lector borrando un libro, o alguien
+  devolviendo el préstamo de otro): **403**.
+
+El préstamo se registra **siempre a nombre del usuario autenticado**. El
+cuerpo de la petición solo lleva `libro_id`: si el cliente pudiera enviar un
+`usuario_id`, cualquiera podría pedir libros a nombre de otra persona.
 
 ### Ejemplos de uso
 
@@ -95,13 +109,21 @@ curl "http://localhost:8080/api/libros?texto=cosmos"
 # Ver recomendaciones para Ana (usuario 2)
 curl http://localhost:8080/api/usuarios/2/recomendaciones
 
-# Registrar un préstamo
+# Registrar un préstamo (a nombre de quien se autentica)
 curl -X POST http://localhost:8080/api/prestamos \
+  -u ana@leelibre.ec:ana123 \
   -H "Content-Type: application/json" \
-  -d '{"usuario_id": 2, "libro_id": 5}'
+  -d '{"libro_id": 5}'
 
-# Devolver un préstamo
-curl -X POST http://localhost:8080/api/prestamos/1/devolver
+# Devolver un préstamo (solo su dueño, o un administrador)
+curl -X POST http://localhost:8080/api/prestamos/1/devolver \
+  -u ana@leelibre.ec:ana123
+
+# Crear un libro (solo administrador)
+curl -X POST http://localhost:8080/api/libros \
+  -u ronny@leelibre.ec:ronny123 \
+  -H "Content-Type: application/json" \
+  -d '{"id": 31, "titulo": "Nuevo", "autor": "Autora", "categoria_id": 1, "anio": 2020, "formato": "PDF"}'
 ```
 
 ## Usuarios de prueba
