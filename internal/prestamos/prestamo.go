@@ -107,9 +107,21 @@ func (p *Prestamo) Devolver() error {
 // buen ejemplo de por qué usamos pointer receiver: modifica el estado
 // del objeto según una regla del dominio.
 func (p *Prestamo) ActualizarEstado() {
+	p.ActualizarEstadoEn(time.Now())
+}
+
+// ActualizarEstadoEn hace el mismo trabajo pero recibe la fecha contra la
+// que comparar, en lugar de consultar el reloj del sistema.
+//
+// Existe por una razón concreta: si el método solo pudiera leer time.Now(),
+// no habría forma de comprobar en una prueba que un préstamo vencido se
+// marca como vencido, salvo cambiando la hora del computador o esperando
+// catorce días. Al recibir la fecha como parámetro, la prueba puede pasarle
+// una fecha futura y verificar el resultado al instante.
+func (p *Prestamo) ActualizarEstadoEn(momento time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.estado == EstadoVigente && time.Now().After(p.fechaVencimiento) {
+	if p.estado == EstadoVigente && momento.After(p.fechaVencimiento) {
 		p.estado = EstadoVencido
 	}
 }
