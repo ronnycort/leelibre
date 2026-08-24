@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ronnycort/leelibre/internal/catalogo"
 	"github.com/ronnycort/leelibre/internal/errores"
@@ -89,6 +90,9 @@ func (s *Server) Rutas() *http.ServeMux {
 
 	// Endpoint bonus: GET /api/reservas/{libro_id} - ver cola de un libro
 	mux.HandleFunc("GET /api/reservas/{libro_id}", s.consultarCola)
+
+	// Endpoint bonus: GET /api/reportes/resumen - varios reportes en paralelo
+	mux.HandleFunc("GET /api/reportes/resumen", s.resumenConcurrente)
 
 	// Endpoint bonus: GET /api/categorias - listar categorías
 	mux.HandleFunc("GET /api/categorias", s.listarCategorias)
@@ -255,6 +259,7 @@ func (s *Server) raiz(w http.ResponseWriter, r *http.Request) {
 			"POST   /api/prestamos/{id}/devolver       (dueño o administrador)",
 			"GET    /api/usuarios/{id}/recomendaciones",
 			"GET    /api/reportes/mas-prestados",
+			"GET    /api/reportes/resumen",
 			"GET    /api/reservas/{libro_id}",
 		},
 	}
@@ -517,6 +522,58 @@ func (s *Server) devolverPrestamo(w http.ResponseWriter, r *http.Request, actor 
 		}
 	}
 	enviarJSON(w, http.StatusOK, respuesta)
+}
+
+// resumenConcurrente - GET /api/reportes/resumen?usuario=N
+//
+// Genera varios reportes a la vez en lugar de uno detrás de otro. Cada
+// reporte se calcula en su propia goroutine y entrega el resultado por un
+// canal; la respuesta incluye cuánto tardó cada uno para que se vea que se
+// solaparon en el tiempo.
+//
+// Los reportes se pasan como []Reportador, así que aquí se juntan dos temas:
+// el polimorfismo de la interface y la concurrencia que los ejecuta.
+func (s *Server) resumenConcurrente(w http.ResponseWriter, r *http.Request) {
+	limite := 5
+	lista := []reportes.Reportador{
+		reportes.NewMasPrestados(s.catalogo, s.historial, limite),
+	}
+
+	// Si se indica un usuario, se añade su recomendador al lote. Es el
+	// reporte más costoso, y es justo el que más se beneficia de no bloquear
+	// a los demás mientras se calcula.
+	if idStr := r.URL.Query().Get("usuario"); idStr != "" {
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			enviarError(w, http.StatusBadRequest, "usuario debe ser un número")
+			return
+		}
+		u, err := s.autenticador.BuscarPorID(id)
+		if err != nil {
+			enviarError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		lista = append(lista, reportes.NewRecomendador(s.catalogo, s.historial, u, limite))
+	}
+
+	inicio := time.Now()
+	resultados := reportes.EjecutarTodosConcurrente(lista)
+	total := time.Since(inicio)
+
+	salida := make([]map[string]interface{}, 0, len(resultados))
+	for _, res := range resultados {
+		salida = append(salida, map[string]interface{}{
+			"reporte":   res.Nombre,
+			"contenido": res.Contenido,
+			"duracion":  res.Duracion.String(),
+		})
+	}
+	enviarJSON(w, http.StatusOK, map[string]interface{}{
+		"reportes":     salida,
+		"generados":    len(resultados),
+		"tiempo_total": total.String(),
+		"nota":         "los reportes se generan en paralelo: el tiempo total se acerca al del más lento, no a la suma de todos",
+	})
 }
 
 // reporteMasPrestados - GET /api/reportes/mas-prestados

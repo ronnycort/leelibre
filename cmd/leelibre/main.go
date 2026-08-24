@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ronnycort/leelibre/internal/catalogo"
 	errdom "github.com/ronnycort/leelibre/internal/errores"
@@ -265,7 +266,8 @@ func (a *App) menuAdministrador() {
 		fmt.Println("  5. Ver reporte de libros más prestados")
 		fmt.Println("  6. Ver todos los préstamos activos")
 		fmt.Println("  7. Ver reservas activas")
-		fmt.Println("  8. Cerrar sesión")
+		fmt.Println("  8. Generar todos los reportes a la vez (concurrente)")
+		fmt.Println("  9. Cerrar sesión")
 		opcion := a.leerLinea("Opción: ")
 
 		switch opcion {
@@ -284,6 +286,8 @@ func (a *App) menuAdministrador() {
 		case "7":
 			a.verReservasActivas()
 		case "8":
+			a.verResumenConcurrente()
+		case "9":
 			fmt.Println("Sesión cerrada.")
 			return
 		default:
@@ -573,6 +577,39 @@ func (a *App) eliminarLibro() {
 	}
 	fmt.Println("Libro eliminado.")
 	a.guardarCambios()
+}
+
+// verResumenConcurrente genera varios reportes al mismo tiempo en lugar de
+// uno detrás de otro, y muestra cuánto tardó cada uno junto al tiempo total.
+//
+// La comparación es la parte interesante: la suma de las duraciones
+// individuales es mayor que el tiempo total transcurrido, y eso solo puede
+// pasar si se ejecutaron solapados.
+func (a *App) verResumenConcurrente() {
+	lista := []reportes.Reportador{
+		reportes.NewMasPrestados(a.catalogo, a.historial, 5),
+	}
+	for _, u := range a.autenticador.Todos() {
+		if len(a.historial.PorUsuario(u.ID())) > 0 {
+			lista = append(lista, reportes.NewRecomendador(a.catalogo, a.historial, u, 3))
+		}
+	}
+
+	fmt.Printf("\nGenerando %d reportes en paralelo...\n", len(lista))
+
+	inicio := time.Now()
+	resultados := reportes.EjecutarTodosConcurrente(lista)
+	total := time.Since(inicio)
+
+	fmt.Print(reportes.FormatearResultados(resultados))
+
+	var suma time.Duration
+	for _, r := range resultados {
+		suma += r.Duracion
+	}
+	fmt.Printf("\nTiempo total transcurrido: %v\n", total)
+	fmt.Printf("Suma de los tiempos individuales: %v\n", suma)
+	fmt.Println("La suma es mayor que el total porque los reportes se generaron al mismo tiempo.")
 }
 
 func (a *App) verReporteMasPrestados() {

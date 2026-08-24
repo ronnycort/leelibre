@@ -11,6 +11,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ronnycort/leelibre/internal/api"
@@ -33,15 +35,42 @@ func main() {
 		puerto = "8080"
 	}
 
-	// Cargar todos los subsistemas del dominio
+	// Carga concurrente de los datos iniciales.
+	//
+	// El catálogo y los usuarios viven en archivos distintos y no dependen
+	// entre sí, así que se leen en paralelo en lugar de uno después del otro.
+	// Cada goroutine envía su error al canal —o nil si todo fue bien— y el
+	// programa continúa cuando ambas han terminado.
+	//
+	// Las categorías y los libros sí se cargan en secuencia dentro de la
+	// misma goroutine, porque un libro no puede registrarse si su categoría
+	// todavía no existe. Es un ejemplo de que no todo se puede paralelizar:
+	// donde hay dependencia, el orden importa.
 	cat := catalogo.NewCatalogo()
-	if err := cat.CargarDesdeArchivos(rutaCategorias, rutaLibros); err != nil {
-		log.Fatalf("Error cargando catálogo: %v", err)
-	}
-
 	auth := usuarios.NewAutenticador()
-	if err := auth.CargarDesdeArchivo(rutaUsuarios); err != nil {
-		log.Fatalf("Error cargando usuarios: %v", err)
+
+	var wg sync.WaitGroup
+	errores := make(chan error, 2)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errores <- cat.CargarDesdeArchivos(rutaCategorias, rutaLibros)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errores <- auth.CargarDesdeArchivo(rutaUsuarios)
+	}()
+
+	wg.Wait()
+	close(errores)
+
+	for err := range errores {
+		if err != nil {
+			log.Fatalf("Error cargando los datos iniciales: %v", err)
+		}
 	}
 
 	hist := prestamos.NewHistorial()
@@ -117,10 +146,23 @@ func sembrarHistorial(hist *prestamos.Historial, cat *catalogo.Catalogo) {
 // entrante con método, ruta y tiempo de respuesta.
 // Es un ejemplo idiomático de middleware en net/http: una función que
 // envuelve un http.Handler y retorna otro http.Handler.
+// peticionesAtendidas cuenta cuántas peticiones ha servido el servidor desde
+// que arrancó. Es un contador compartido por todas las goroutines que atienden
+// peticiones, así que no puede ser un int normal: dos peticiones simultáneas
+// harían "leer, sumar uno, escribir" a la vez y una de las dos sumas se
+// perdería.
+//
+// atomic.Int64 resuelve justamente eso. Su método Add es una operación
+// atómica, es decir, indivisible: ninguna otra goroutine puede colarse en
+// medio. Aquí basta con esto y no hace falta un mutex, porque la única
+// operación sobre el contador es sumar.
+var peticionesAtendidas atomic.Int64
+
 func loggingMiddleware(siguiente http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		inicio := time.Now()
+		n := peticionesAtendidas.Add(1)
 		siguiente.ServeHTTP(w, r)
-		log.Printf("%s %s -- %v", r.Method, r.URL.Path, time.Since(inicio))
+		log.Printf("#%d %s %s -- %v", n, r.Method, r.URL.Path, time.Since(inicio))
 	})
 }
