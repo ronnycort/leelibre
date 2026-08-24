@@ -1,114 +1,114 @@
 # LeeLibre
 
-Sistema de gestión de biblioteca digital desarrollado en Go bajo el paradigma de **Programación Orientada a Objetos**. Proyecto integrador de la asignatura *Programación Orientada a Objetos 2*.
+Sistema de gestión de biblioteca digital desarrollado en **Go**, aplicando programación orientada a objetos, concurrencia y servicios web REST.
 
-Estado: **Etapa 2 completada** — dominio de POO, cola de reservas, persistencia en JSON y servicios web REST.
+**Proyecto integrador** — Programación Orientada a Objetos 2
+**Autor:** Cortez Villa Ronny (trabajo individual)
+**Docente:** Ing. Torres Arévalo Carlos
+**Universidad Internacional del Ecuador**
+**Fecha de entrega:** 23 de agosto de 2026
 
-## Descripción
+---
 
-LeeLibre administra una biblioteca digital con dos interfaces sobre el mismo núcleo:
+## Objetivo del programa
 
-- **CLI (consola)** — herramienta de operación local para administradores y lectores.
-- **API REST** — servicios web con serialización JSON, listos para consumo desde cualquier cliente HTTP.
+Administrar una biblioteca digital: mantener un catálogo de libros, controlar quién los tiene prestados y hasta cuándo, gestionar la espera cuando un título no está disponible, y ofrecer al lector recomendaciones basadas en lo que ya ha leído.
 
-Ambas comparten los mismos paquetes del dominio (`catalogo`, `usuarios`, `prestamos`, `reservas`, `reportes`), demostrando que la arquitectura por capas permite exponer la misma lógica a través de múltiples interfaces sin duplicación.
+El sistema se usa de dos formas sobre el mismo núcleo: una **aplicación de consola** para operar localmente y un **servidor de servicios web REST** que expone las mismas operaciones en JSON.
 
-## Stack tecnológico
+---
 
-- **Lenguaje:** Go 1.22+
-- **Servidor web:** `net/http` (biblioteca estándar — sin dependencias externas)
-- **Serialización:** JSON con `encoding/json`
-- **Persistencia:** archivos JSON en disco
-- **Cero dependencias externas** — el proyecto compila con solo la biblioteca estándar
+## Funcionalidades principales
 
-## Estructura del proyecto
+**Catálogo**
+- Consultar todos los libros, buscar por texto (título o autor) y filtrar por categoría o disponibilidad.
+- Agregar, modificar y retirar libros. Reservado al administrador.
+- Validación de datos: no se admite un título vacío, un año fuera del rango 1000–2100 ni un formato distinto de PDF o EPUB.
 
-```
-leelibre/
-├── cmd/
-│   ├── leelibre/main.go          # Aplicación CLI
-│   └── server/main.go            # Servidor HTTP REST
-├── internal/
-│   ├── errores/errores.go        # Errores de dominio
-│   ├── catalogo/                 # Libros, categorías, catálogo
-│   ├── usuarios/                 # Usuarios, autenticación, roles
-│   ├── prestamos/                # Préstamos e historial
-│   ├── reservas/                 # ★ Cola FIFO de reservas (estructura de datos)
-│   ├── reportes/                 # Interface Reportador + implementaciones
-│   ├── persistencia/             # Guardado a JSON de cambios
-│   └── api/                      # Handlers HTTP y DTOs para JSON
-├── data/
-│   ├── categorias.json           # 7 categorías
-│   ├── libros.json               # 30 libros
-│   ├── usuarios.json             # 10 usuarios
-│   └── prestamos.json            # Se genera al ejecutar (persistencia)
-├── docs/                         # Documentación de etapas
-├── go.mod                        # Sin dependencias
-└── README.md
-```
+**Usuarios y autenticación**
+- Dos roles: lector y administrador, con permisos distintos.
+- La contraseña no se puede leer, solo verificar.
+- En el API, autenticación básica de HTTP mediante un middleware.
+
+**Préstamos**
+- Préstamo por 14 días con cálculo automático del vencimiento.
+- Tres estados: vigente, devuelto y vencido.
+- Historial por usuario y por libro.
+- Un préstamo solo lo puede devolver su titular o un administrador.
+
+**Reservas**
+- Si el libro está prestado, el usuario entra en una **cola FIFO** en lugar de recibir solo un error.
+- Al devolverse el libro, el primero de la fila queda notificado.
+- Consulta de la posición en la cola.
+
+**Reportes**
+- Libros más prestados.
+- **Recomendador personalizado**: construye el perfil del lector a partir de su historial y puntúa los libros que aún no ha leído, indicando el motivo de cada sugerencia.
+- Generación de varios reportes **en paralelo**.
+
+---
 
 ## Cómo ejecutar
 
-### Modo CLI (menú por consola)
+Requiere Go 1.22 o superior. **No hay dependencias externas que instalar.**
 
 ```bash
+# Aplicación de consola
 go run ./cmd/leelibre
-```
 
-### Modo servidor REST (servicios web)
-
-```bash
+# Servidor de servicios web (puerto 8080 por defecto)
 go run ./cmd/server
+PORT=3000 go run ./cmd/server   # con otro puerto
+
+# Pruebas
+go test ./...                   # toda la batería
+go test -v ./internal/reservas  # detalle de un paquete
+go test -race ./...             # con detector de condiciones de carrera
+go test -cover ./...            # con porcentaje de cobertura
 ```
 
-Por defecto escucha en el puerto 8080. Se puede cambiar con la variable de entorno `PORT`:
+---
 
-```bash
-PORT=3000 go run ./cmd/server
-```
+## Servicios web
 
-## Endpoints REST disponibles
+Trece rutas, todas con respuesta en JSON.
 
 | Método | Ruta | Descripción | Acceso |
 |---|---|---|---|
-| `GET` | `/` | Información del API | Público |
-| `GET` | `/api/libros` | Listar catálogo (soporta `?texto=` y `?categoria=`) | Público |
+| `GET` | `/` | Información del API y sus rutas | Público |
+| `GET` | `/api/libros` | Listar catálogo (`?texto=` y `?categoria=`) | Público |
 | `GET` | `/api/libros/{id}` | Detalle de un libro | Público |
-| `POST` | `/api/libros` | Crear libro | **Administrador** |
-| `PUT` | `/api/libros/{id}` | Modificar título, autor, año o formato | **Administrador** |
-| `DELETE` | `/api/libros/{id}` | Eliminar libro | **Administrador** |
+| `POST` | `/api/libros` | Crear libro | Administrador |
+| `PUT` | `/api/libros/{id}` | Modificar libro | Administrador |
+| `DELETE` | `/api/libros/{id}` | Eliminar libro | Administrador |
 | `GET` | `/api/categorias` | Listar categorías | Público |
-| `POST` | `/api/prestamos` | Registrar préstamo (o encolar si no disponible) | **Autenticado** |
-| `POST` | `/api/prestamos/{id}/devolver` | Devolver un libro | **Dueño o administrador** |
+| `POST` | `/api/prestamos` | Registrar préstamo, o encolar si no está disponible | Autenticado |
+| `POST` | `/api/prestamos/{id}/devolver` | Devolver un libro | Titular o administrador |
 | `GET` | `/api/usuarios/{id}/recomendaciones` | Recomendaciones personalizadas | Público |
 | `GET` | `/api/reportes/mas-prestados` | Top de libros más prestados | Público |
-| `GET` | `/api/reservas/{libro_id}` | Ver cola de espera de un libro | Público |
+| `GET` | `/api/reportes/resumen` | Varios reportes generados **en paralelo** | Público |
+| `GET` | `/api/reservas/{libro_id}` | Cola de espera de un libro | Público |
 
 ### Autenticación
 
-Los endpoints protegidos usan **autenticación básica de HTTP**, resuelta con un
-middleware sobre `r.BasicAuth()` de la biblioteca estándar. En `curl` basta
-con `-u correo:contraseña`.
+Los endpoints protegidos usan autenticación básica de HTTP, resuelta con un middleware sobre `r.BasicAuth()`. En `curl` basta con `-u correo:contraseña`.
 
-- Sin credenciales o con credenciales incorrectas: **401**.
-- Autenticado pero sin permiso (un lector borrando un libro, o alguien
-  devolviendo el préstamo de otro): **403**.
+- Sin credenciales o incorrectas → **401**
+- Autenticado pero sin permiso → **403**
 
-El préstamo se registra **siempre a nombre del usuario autenticado**. El
-cuerpo de la petición solo lleva `libro_id`: si el cliente pudiera enviar un
-`usuario_id`, cualquiera podría pedir libros a nombre de otra persona.
+El préstamo se registra **siempre a nombre de quien se autentica**; el cuerpo solo lleva `libro_id`. Si el cliente pudiera enviar un `usuario_id`, cualquiera podría pedir libros en nombre de otra persona.
 
-### Ejemplos de uso
+### Ejemplos
 
 ```bash
-# Listar todos los libros
-curl http://localhost:8080/api/libros
-
-# Buscar libros por texto
+# Buscar libros
 curl "http://localhost:8080/api/libros?texto=cosmos"
 
-# Ver recomendaciones para Ana (usuario 2)
+# Recomendaciones para Ana (usuario 2)
 curl http://localhost:8080/api/usuarios/2/recomendaciones
+
+# Varios reportes a la vez: la respuesta trae el tiempo de cada uno
+curl "http://localhost:8080/api/reportes/resumen?usuario=2"
 
 # Registrar un préstamo (a nombre de quien se autentica)
 curl -X POST http://localhost:8080/api/prestamos \
@@ -116,78 +116,167 @@ curl -X POST http://localhost:8080/api/prestamos \
   -H "Content-Type: application/json" \
   -d '{"libro_id": 5}'
 
-# Devolver un préstamo (solo su dueño, o un administrador)
-curl -X POST http://localhost:8080/api/prestamos/1/devolver \
-  -u ana@leelibre.ec:ana123
-
-# Modificar un libro: solo los campos enviados cambian (solo administrador)
+# Modificar un libro (solo administrador)
 curl -X PUT http://localhost:8080/api/libros/1 \
   -u ronny@leelibre.ec:ronny123 \
   -H "Content-Type: application/json" \
   -d '{"anio": 1970}'
-
-# Crear un libro (solo administrador)
-curl -X POST http://localhost:8080/api/libros \
-  -u ronny@leelibre.ec:ronny123 \
-  -H "Content-Type: application/json" \
-  -d '{"id": 31, "titulo": "Nuevo", "autor": "Autora", "categoria_id": 1, "anio": 2020, "formato": "PDF"}'
 ```
 
-## Usuarios de prueba
+### Usuarios de prueba
 
-| Correo | Contraseña | Rol | Perfil |
+| Correo | Contraseña | Rol | Perfil de lectura |
 |---|---|---|---|
 | `ronny@leelibre.ec` | `ronny123` | Administrador | — |
-| `ana@leelibre.ec` | `ana123` | Lector | Ficción |
+| `ana@leelibre.ec` | `ana123` | Lectora | Ficción |
 | `carlos@leelibre.ec` | `carlos123` | Lector | Ciencia |
-| `maria@leelibre.ec` | `maria123` | Lector | Historia/Filosofía |
+| `maria@leelibre.ec` | `maria123` | Lectora | Historia y filosofía |
 | `juan@leelibre.ec` | `juan123` | Lector | Tecnología |
 
-## Conceptos de POO aplicados
+---
 
-Este proyecto implementa los temas de las **4 unidades** de la asignatura:
+## Mapeo de los contenidos de la asignatura
 
-- **Unidad 1** — Sintaxis, condicionales, funciones, imports: todo el código
-- **Unidad 2** — Arrays, slices, maps, structs, métodos, constructores: todos los paquetes
-- **Unidad 3** — Encapsulación por paquete, getters idiomáticos, **setters con validación de invariantes**, manejo de errores con `errors.Is`, interfaces con polimorfismo
-- **Unidad 4** — Servicios web REST con `net/http`, serialización JSON con `encoding/json`, patrón middleware
+Dónde queda implementado cada tema de las cuatro unidades.
 
-### Estructuras de datos
+### Unidad 1 — Fundamentos (semanas 1 y 2)
 
-- **Slice** — catálogo de libros, historial de préstamos
-- **Map** — índices por id, perfil de lector del recomendador
-- **Cola FIFO** — cola de reservas cuando un libro no está disponible (paquete `reservas`)
+| Tema | Dónde | Ejemplo |
+|---|---|---|
+| Sintaxis, variables, condicionales | Todo el proyecto | `internal/catalogo/libro.go` |
+| Funciones y valores de retorno múltiples | Todo el proyecto | `NewLibro() (*Libro, error)` |
+| Paquetes e imports locales | 8 paquetes en `internal/` | `cmd/server/main.go` |
+| Bucles | Recorridos y menús | `menuLector()` en `cmd/leelibre/main.go` |
 
-### Polimorfismo
+### Unidad 2 — Estructuras de datos (semanas 3 y 4)
 
-La interface `Reportador` en `internal/reportes/reportador.go` es implementada por:
-- `MasPrestados` (`internal/reportes/mas_prestados.go`)
-- `Recomendador` (`internal/reportes/recomendador.go`)
+| Tema | Dónde | Por qué |
+|---|---|---|
+| **Slice** | Catálogo de libros, historial de préstamos, cola de reservas | La colección crece y se recorre entera con frecuencia |
+| **Map** | Índices por id y por correo, perfil del lector, conteo por libro | Acceso directo por clave sin recorrer la colección |
+| **Array** | *No se usa* | Ninguna colección del dominio tiene tamaño fijo conocido de antemano; forzar un array daría un límite artificial de libros o usuarios |
+| **Struct** | `Libro`, `Categoria`, `Usuario`, `Prestamo`, `Cola`, `Catalogo`… | Cada entidad del dominio |
+| **Métodos** | Todas las entidades | `libro.Prestar()`, `prestamo.Devolver()` |
+| **Constructores** | Función `New*` por tipo | `NewLibro`, `NewUsuario`, `NewPrestamo` |
+| **Cola FIFO** | `internal/reservas/reservas.go` | El orden de llegada decide quién recibe el libro primero |
 
-Ambos se usan de forma uniforme desde CLI y API sin conocer el tipo concreto.
+### Unidad 3 — Programación orientada a objetos (semanas 5 y 6)
 
-## Funcionalidad no básica
+| Tema | Dónde | Ejemplo |
+|---|---|---|
+| **Encapsulación** | Todos los campos en minúscula | `Usuario.password` no tiene captador: solo se verifica |
+| **Captadores idiomáticos** | Sin prefijo `Get` | `libro.Titulo()`, no `libro.GetTitulo()` |
+| **Modificadores con validación** | `internal/catalogo/libro.go` | `SetAnio` rechaza años fuera de 1000–2100 |
+| **Receptores de puntero y de valor** | Puntero cuando se modifica | `func (l *Libro) Prestar() error` |
+| **Manejo de errores** | `internal/errores/errores.go` | Valores centinela comparados con `errors.Is` |
+| **Envoltura de errores** | Todo el dominio | `fmt.Errorf("%w: …", errores.ErrDatosInvalidos)` |
+| **Interfaces y polimorfismo** | `internal/reportes/reportador.go` | `Reportador`, con dos implementaciones |
+| **`fmt.Stringer`** | `Libro.String()`, `Prestamo.String()` | Interface de la biblioteca estándar |
 
-El **recomendador personalizado** (`internal/reportes/recomendador.go`) analiza el historial del usuario, construye su perfil de lector (map de categorías), y sugiere libros no leídos con un score de coincidencia. Es la funcionalidad estrella que va más allá del CRUD básico.
+### Unidad 4 — Concurrencia, servicios web y pruebas (semanas 7 y 8)
 
-## Trazabilidad con la Etapa 1
+| Tema | Dónde | Para qué |
+|---|---|---|
+| **Goroutines** | `internal/reportes/concurrente.go`, `cmd/server/main.go` | Generar reportes a la vez; cargar los archivos de datos en paralelo |
+| **`sync.WaitGroup`** | Los mismos dos sitios | Esperar a que terminen las goroutines antes de continuar |
+| **Canales** | `internal/reportes/concurrente.go` | Cada goroutine entrega su resultado por el canal |
+| **Canal con búfer** | `EjecutarTodosConcurrente` | Evita que las goroutines se bloqueen al escribir |
+| **`sync.RWMutex`** | `Catalogo`, `Historial`, `Cola`, `Libro`, `Prestamo` | El servidor atiende cada petición en su goroutine: sin candado, dos peticiones corromperían el estado |
+| **`sync/atomic`** | `cmd/server/main.go` | Contador de peticiones atendidas, sin bloqueo |
+| **Condiciones de carrera** | Verificado con `go test -race` | 12 accesos conflictivos detectados y corregidos |
+| **Servicios web REST** | `internal/api/server.go` | 13 rutas con `net/http` |
+| **Serialización JSON** | DTOs en `internal/api/server.go` | `encoding/json` con etiquetas de campo |
+| **Patrón middleware** | `conAuth`, `conAdmin`, `loggingMiddleware` | Autenticación y registro sin repetirlos en cada handler |
+| **Pruebas unitarias** | 6 archivos `_test.go` | 48 funciones de prueba |
+| **Pruebas basadas en tabla** | `libro_test.go`, `prestamo_test.go` | Un caso por fila, con `t.Run` |
+| **Pruebas de HTTP** | `internal/api/server_test.go` | `httptest.NewRecorder` sin abrir puertos |
 
-| Planificado en Etapa 1 | Implementado en Etapa 2 |
-|---|---|
-| Arquitectura por capas | ✅ Paquetes internos + `api/` como capa web |
-| Servicios web con JSON | ✅ `net/http` + 10 endpoints REST |
-| Módulo de catálogo | ✅ `internal/catalogo/` |
-| Módulo de usuarios | ✅ `internal/usuarios/` con roles |
-| Módulo de préstamos | ✅ `internal/prestamos/` con estados |
-| Módulo de reportes | ✅ `internal/reportes/` con interface |
-| Manejo de errores | ✅ `internal/errores/` con `errors.Is` |
-| Rama "libro no disponible" del diagrama de flujo | ✅ `internal/reservas/` (cola FIFO) |
+---
 
-## Autor
+## Estructura del proyecto
 
-**Cortez Villa Ronny** — Estudiante de tercer semestre
-Universidad Internacional del Ecuador
+```
+leelibre/
+├── cmd/
+│   ├── leelibre/main.go          Aplicación de consola
+│   └── server/main.go            Servidor REST + carga concurrente
+├── internal/
+│   ├── errores/                  Errores centinela del dominio
+│   ├── catalogo/                 Libros, categorías y catálogo
+│   ├── usuarios/                 Usuarios, roles y autenticación
+│   ├── prestamos/                Préstamos e historial
+│   ├── reservas/                 Cola FIFO de espera
+│   ├── reportes/                 Interface Reportador y ejecución concurrente
+│   ├── persistencia/             Guardado en JSON con escritura atómica
+│   └── api/                      Handlers HTTP, DTOs y middleware
+├── data/                         Datos de ejemplo (7 categorías, 30 libros, 10 usuarios)
+├── docs/                         Documentación y diagramas de las tres etapas
+├── go.mod                        Sin dependencias externas
+└── README.md
+```
+
+La dirección de las dependencias es un criterio sostenido: los paquetes del dominio no conocen la capa web, y `catalogo` no depende de `usuarios` ni de `prestamos`. Por eso los dos ejecutables comparten el mismo núcleo sin duplicar lógica.
+
+---
+
+## Pruebas
+
+```
+48 funciones de prueba en 6 paquetes, todas en verde con el detector de carreras.
+
+paquete                cobertura
+internal/reservas          94.1 %
+internal/catalogo          65.8 %
+internal/api               60.4 %
+internal/prestamos         54.7 %
+internal/usuarios          51.0 %
+```
+
+Lo que cubren, más allá del porcentaje:
+
+- **Reglas del dominio**: que un libro prestado no se pueda prestar dos veces, que un préstamo venza a los 14 días, que devolver dos veces falle.
+- **Validaciones**: que los modificadores rechacen lo imposible **y que el objeto conserve su valor anterior**, no que quede a medio cambiar.
+- **Seguridad**: la matriz completa de permisos (401 / 403 / 200) y que un usuario no pueda pedir un libro a nombre de otro ni devolver un préstamo ajeno.
+- **Encapsulación**: que los métodos que devuelven colecciones entreguen una copia, de modo que quien la reciba no pueda alterar el estado interno.
+- **Concurrencia**: 50 reservas simultáneas sin perder ninguna, y que los reportes en paralelo tarden menos que en secuencia (61 ms frente a 180 ms).
+
+Para poder probar el vencimiento sin esperar catorce días ni cambiar la hora del computador, `ActualizarEstadoEn(momento)` recibe la fecha como parámetro en lugar de leer el reloj del sistema.
+
+---
+
+## Decisiones de diseño
+
+**Sin dependencias externas.** La planeación inicial contemplaba Gin, SQLite, JWT y bcrypt; no se usó ninguno. Desde Go 1.22 el enrutador de la biblioteca estándar admite métodos y variables de ruta, que era lo que aportaba el framework. El proyecto compila sin descargar nada y las decisiones de diseño quedan a la vista en el código, no delegadas.
+
+**Persistencia en archivos JSON.** Para este volumen la diferencia con una base de datos es irrelevante, y la capa quedó aislada: migrarla no afectaría al resto de módulos. La escritura es atómica —primero a un archivo temporal y luego renombrado— para que una interrupción no deje el archivo corrupto.
+
+**Del paradigma funcional al orientado a objetos.** La planeación de la Etapa 1 proponía programación funcional. Se corrigió porque los contenidos de la asignatura —estructuras, métodos, encapsulación, interfaces— pertenecen al paradigma orientado a objetos. Lo que sí encajaba se conservó: `Catalogo.Filtrar` recibe una función como parámetro, y las búsquedas se construyen sobre ella en lugar de repetir el recorrido.
+
+---
+
+## Alcance y limitaciones
+
+**Incluido:** catálogo completo, usuarios con roles, préstamos con estados, cola de reservas, recomendador, 13 servicios REST con autenticación, persistencia en JSON, concurrencia y batería de pruebas.
+
+**No incluido, y por qué:**
+
+- **Interfaz web visual.** El proyecto expone JSON; consumirlo desde un navegador corresponde a programación web y queda fuera del alcance de esta asignatura.
+- **Base de datos.** Ver decisiones de diseño.
+- **Contraseñas cifradas.** Se guardan en texto plano en los datos de ejemplo, que son ficticios. En un sistema real irían con `bcrypt`; se documenta como limitación consciente y no como olvido.
+- **Cobertura completa de pruebas.** Se priorizaron las reglas de negocio y la seguridad sobre el porcentaje. Los paquetes `persistencia` y los `cmd` no tienen pruebas propias.
+
+---
+
+## Documentación
+
+En `docs/`:
+- Documento de la Etapa 1 — planeación
+- Documento de la Etapa 2 — desarrollo
+- Documento final — integración de las cuatro unidades
+- `diagrams/` — diagramas editables en formato draw.io, incluido el diagrama de clases del sistema
+
+---
 
 ## Licencia
 
-MIT — ver archivo `LICENSE`.
+MIT — ver el archivo `LICENSE`.
